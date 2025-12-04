@@ -4,8 +4,19 @@ import os
 import time
 import glob
 import requests
+import mimetypes
 
 app = Flask(__name__)
+
+# تنظيف الملفات القديمة تلقائياً عند تشغيل التطبيق
+def clean_temp_files():
+    try:
+        for f in glob.glob("media_*"):
+            os.remove(f)
+    except:
+        pass
+
+clean_temp_files()
 
 @app.route('/')
 def home():
@@ -18,86 +29,72 @@ def download_media():
     if not url:
         return "الرجاء إدخال رابط", 400
 
-    # تنظيف أي ملفات قديمة (اختياري للصيانة)
-    clean_old_files()
-
-    # معرف فريد للملف (timestamp)
+    # اسم أساسي للملف بدون لاحقة
     file_id = str(int(time.time()))
     base_filename = f"media_{file_id}"
     
+    # 1. المحاولة الأولى: التحقق مما إذا كان الرابط صورة مباشرة باستخدام Requests
+    # هذه الطريقة تنجح مع الصور التي لا تنتهي بـ .jpg
     try:
-        # --- المحاولة الأولى: هل الرابط صورة مباشرة؟ (مثل .jpg .png) ---
-        if is_direct_image(url):
-            return download_direct_image(url, base_filename)
+        # استخدام هوية متصفح حقيقي لتجنب الحظر
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        # فحص الرابط (Head Request) لنعرف نوعه قبل التحميل
+        response = requests.get(url, headers=headers, stream=True, timeout=10)
+        content_type = response.headers.get('Content-Type', '').lower()
 
-        # --- المحاولة الثانية: استخدام yt-dlp للفيديوهات ومنصات التواصل ---
+        # إذا كان الرابط يؤدي لصورة مباشرة
+        if 'image' in content_type and 'html' not in content_type:
+            # تخمين الصيغة (jpg, png, etc)
+            ext = mimetypes.guess_extension(content_type) or '.jpg'
+            final_filename = f"{base_filename}{ext}"
+            
+            with open(final_filename, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            
+            return send_file(final_filename, as_attachment=True, download_name=f"image{ext}")
+
+    except Exception as e:
+        print(f"Direct download failed, trying yt-dlp: {e}")
+
+    # 2. المحاولة الثانية: استخدام yt-dlp (لليوتيوب، تويتر، انستا، وغيرها)
+    try:
         ydl_opts = {
-            'format': 'best',  # أفضل جودة متاحة (فيديو أو صورة)
-            # النقطة المهمة: نترك الامتداد %(ext)s ليحدده البرنامج تلقائياً
-            'outtmpl': f'{base_filename}.%(ext)s',
+            'format': 'best', # أفضل جودة
+            'outtmpl': f'{base_filename}.%(ext)s', # الحفظ بالاسم الأساسي + الامتداد الأصلي
             'quiet': True,
             'no_warnings': True,
-            # السماح بتحميل قوائم التشغيل كملف واحد (للمنشورات التي تحتوي صوراً)
             'noplaylist': True,
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         
-        # البحث عن الملف الذي تم تحميله (لأننا لا نعرف صيغته مسبقاً)
-        # نبحث عن أي ملف يبدأ بـ media_123456
+        # البحث عن الملف الذي تم إنشاؤه (لأننا لا نعرف هل هو mp4 أم jpg أم webp)
         found_files = glob.glob(f"{base_filename}.*")
         
         if not found_files:
-            return "فشل التحميل: لم يتم العثور على وسائط.", 500
+            return "فشل التحميل: لم يتم العثور على ملف (قد يكون الحساب خاصاً أو الرابط غير مدعوم)", 500
 
-        final_file = found_files[0] # نأخذ أول ملف وجدناه
+        final_file = found_files[0]
         
-        # تحديد اسم الملف عند التحميل (Download Name)
-        extension = os.path.splitext(final_file)[1]
-        download_name = f"downloaded_media{extension}"
+        # تحديد اسم الملف عند التنزيل للمستخدم
+        file_ext = os.path.splitext(final_file)[1]
+        download_name = f"downloaded_media{file_ext}"
 
         return send_file(final_file, as_attachment=True, download_name=download_name)
 
     except Exception as e:
-        return f"حدث خطأ: {str(e)}", 500
-
-def is_direct_image(url):
-    # وظيفة للتحقق مما إذا كان الرابط ينتهي بصيغة صورة معروفة
-    image_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
-    return any(url.lower().endswith(ext) for ext in image_extensions)
-
-def download_direct_image(url, base_filename):
-    try:
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-        
-        # تخمين الامتداد من الرابط أو نوع المحتوى
-        if 'image/jpeg' in response.headers.get('Content-Type', ''):
-            ext = '.jpg'
-        elif 'image/png' in response.headers.get('Content-Type', ''):
-            ext = '.png'
-        else:
-            ext = os.path.splitext(url)[1] or '.jpg'
-
-        full_filename = f"{base_filename}{ext}"
-        
-        with open(full_filename, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-                
-        return send_file(full_filename, as_attachment=True, download_name=f"image{ext}")
-    except Exception as e:
-        raise Exception(f"فشل تحميل الصورة المباشرة: {str(e)}")
-
-def clean_old_files():
-    # دالة مساعدة لحذف الملفات القديمة جداً من السيرفر
-    try:
-        for file in glob.glob("media_*"):
-            # إذا مر على الملف أكثر من 10 دقائق نحذفه
-            if time.time() - os.path.getmtime(file) > 600:
-                os.remove(file)
-    except:
+        error_msg = str(e)
+        if "No video formats" in error_msg:
+             return "الرابط لا يحتوي على فيديو أو صورة قابلة للتحميل", 400
+        return f"حدث خطأ: {error_msg}", 500
+    
+    finally:
+        # محاولة تنظيف الملفات بعد الإرسال بفترة قصيرة (اختياري)
         pass
 
 if __name__ == '__main__':
