@@ -3,17 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>X Downloader</title>
+    <title>تحميل فيديو</title>
     <style>
-        /* إعدادات الهوية البصرية (ستايل تويتر/X) */
+        /* إعدادات الهوية البصرية (بنفسجي + بيج) */
         :root {
-            --bg-color: #000000;
-            --card-bg: #16181c;
-            --text-main: #e7e9ea;
-            --text-sec: #71767b;
-            --twitter-blue: #1d9bf0;
-            --twitter-blue-hover: #1a8cd8;
-            --border-color: #2f3336;
+            --bg-color: #fdfbf7;        /* بيج فاتح جداً (كريمي) */
+            --card-bg: #ffffff;         /* أبيض نقي للمحتوى */
+            --primary-color: #8e44ad;   /* بنفسجي مميز */
+            --primary-hover: #732d91;   /* بنفسجي أغمق عند الضغط */
+            --text-main: #2c2c54;       /* كحلي غامق جداً للنصوص */
+            --text-sec: #84817a;        /* رمادي دافئ للنصوص الفرعية */
+            --border-color: #eaeaea;    /* حدود ناعمة */
+            --shadow: 0 10px 30px rgba(142, 68, 173, 0.15); /* ظل خفيف بنفسجي */
         }
 
         body {
@@ -31,14 +32,27 @@
 
         .container {
             width: 100%;
-            max-width: 500px;
+            max-width: 480px;
+            background-color: var(--card-bg);
+            padding: 40px 30px;
+            border-radius: 25px; /* حواف دائرية ناعمة */
+            box-shadow: var(--shadow);
             text-align: center;
+            border: 1px solid #f2f2f2;
         }
 
         h1 {
-            font-size: 24px;
-            margin-bottom: 30px;
+            font-size: 26px;
+            margin-bottom: 10px;
             font-weight: 800;
+            color: var(--primary-color);
+        }
+        
+        p.subtitle {
+            margin-top: 0;
+            margin-bottom: 30px;
+            color: var(--text-sec);
+            font-size: 14px;
         }
 
         .input-group {
@@ -49,96 +63,106 @@
 
         input {
             width: 100%;
-            padding: 16px 20px;
-            background-color: #202327;
-            border: 1px solid var(--border-color);
-            border-radius: 9999px; /* شكل كبسولة */
-            color: white;
+            padding: 18px 25px;
+            background-color: #f8f6f2; /* بيج أغمق قليلاً للحقل */
+            border: 2px solid transparent;
+            border-radius: 15px;
+            color: var(--text-main);
             font-size: 16px;
             outline: none;
             box-sizing: border-box;
-            transition: 0.2s;
+            transition: 0.3s;
         }
 
         input:focus {
-            border-color: var(--twitter-blue);
-            background-color: black;
+            background-color: #fff;
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 15px rgba(142, 68, 173, 0.1);
         }
 
         button {
             width: 100%;
-            padding: 15px;
-            background-color: var(--twitter-blue);
+            padding: 18px;
+            background-color: var(--primary-color);
             color: white;
             border: none;
-            border-radius: 9999px;
-            font-size: 17px;
+            border-radius: 15px;
+            font-size: 18px;
             font-weight: bold;
             cursor: pointer;
-            transition: 0.2s;
-            box-shadow: 0 4px 10px rgba(29, 155, 240, 0.3);
+            transition: 0.3s;
+            box-shadow: 0 5px 15px rgba(142, 68, 173, 0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
         button:hover {
-            background-color: var(--twitter-blue-hover);
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
         }
 
         button:disabled {
-            background-color: #333;
-            color: #777;
-            cursor: not-allowed;
+            background-color: #ccc;
             box-shadow: none;
+            cursor: not-allowed;
+            transform: none;
         }
 
         /* رسائل الحالة */
         #status-msg {
-            margin-top: 20px;
+            margin-top: 25px;
             font-size: 14px;
-            color: var(--text-sec);
+            font-weight: 500;
             min-height: 20px;
         }
 
         /* لودر التحميل */
         .spinner {
             display: none;
-            width: 20px;
-            height: 20px;
+            width: 24px;
+            height: 24px;
             border: 3px solid rgba(255,255,255,0.3);
             border-radius: 50%;
             border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
-            margin: 0 auto;
+            animation: spin 0.8s ease-in-out infinite;
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
         /* تذييل الصفحة */
         .footer {
-            margin-top: 40px;
+            margin-top: 30px;
             font-size: 12px;
             color: var(--text-sec);
+            opacity: 0.7;
         }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <!-- عنوان بسيط -->
-        <h1>Video Downloader</h1>
+        <!-- العنوان -->
+        <h1>فيديو داونلودر</h1>
+        <p class="subtitle">الصق الرابط وحمل الفيديو بجودة عالية</p>
 
         <div class="input-group">
-            <input type="text" id="urlInput" placeholder="الصق الرابط هنا..." autocomplete="off">
+            <input type="text" id="urlInput" placeholder="رابط الفيديو (يوتيوب، إكس، تيك توك...)" autocomplete="off">
         </div>
 
         <button id="downloadBtn" onclick="startDownload()">
-            <span id="btnText">تحميل</span>
+            <span id="btnText">تحميل الفيديو</span>
             <div id="spinner" class="spinner"></div>
         </button>
 
         <div id="status-msg"></div>
-
+        
         <div class="footer">
-            يدعم X, YouTube, TikTok, Instagram
+            يدعم معظم منصات التواصل الاجتماعي
         </div>
     </div>
 
@@ -153,24 +177,23 @@
             const url = input.value.trim();
 
             if (!url) {
-                statusMsg.style.color = "#f4212e"; // لون أحمر تويتر
-                statusMsg.innerText = "الرجاء وضع رابط أولاً";
+                statusMsg.style.color = "#e74c3c"; // أحمر ناعم للخطأ
+                statusMsg.innerText = "⚠️ فضلاً، ضع الرابط في المربع أولاً";
                 return;
             }
 
             // 1. تفريغ المربع فوراً
             input.value = '';
-            input.blur(); // إخفاء الكيبورد في الجوال
+            input.blur(); 
 
-            // 2. تغيير حالة الزر إلى "جاري التحميل"
+            // 2. تغيير واجهة الزر
             btn.disabled = true;
             btnText.style.display = 'none';
             spinner.style.display = 'block';
-            statusMsg.style.color = var(--text-sec);
-            statusMsg.innerText = "جاري المعالجة... قد يستغرق دقيقة";
+            statusMsg.style.color = "#84817a";
+            statusMsg.innerText = "جاري التحميل والمعالجة... لحظات";
 
             try {
-                // إرسال البيانات باستخدام FormData (كما يتوقع كود البايثون)
                 const formData = new FormData();
                 formData.append('url', url);
 
@@ -180,40 +203,35 @@
                 });
 
                 if (response.ok) {
-                    // تحويل الرد إلى ملف (Blob)
                     const blob = await response.blob();
-                    
-                    // استخراج اسم الملف (اختياري) أو تعيين اسم افتراضي
                     const downloadUrl = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = downloadUrl;
-                    a.download = "video.mp4"; // الاسم الافتراضي
+                    a.download = "video.mp4";
                     document.body.appendChild(a);
                     a.click();
                     a.remove();
                     
-                    statusMsg.style.color = "#00ba7c"; // لون أخضر
-                    statusMsg.innerText = "تم التحميل بنجاح!";
+                    statusMsg.style.color = "#27ae60"; // أخضر
+                    statusMsg.innerText = "✅ تم التنزيل بنجاح!";
                 } else {
-                    // محاولة قراءة رسالة الخطأ
                     const errorText = await response.text();
-                    throw new Error(errorText || "فشل التحميل");
+                    throw new Error(errorText);
                 }
 
             } catch (error) {
-                statusMsg.style.color = "#f4212e";
-                statusMsg.innerText = "حدث خطأ: تأكد من صحة الرابط أو أن الحساب عام.";
+                statusMsg.style.color = "#e74c3c";
+                statusMsg.innerText = "❌ تعذر التحميل. تأكد من صحة الرابط.";
                 console.error(error);
             } finally {
-                // إعادة الزر لوضعه الطبيعي
+                // إعادة الزر
                 btn.disabled = false;
                 btnText.style.display = 'block';
                 spinner.style.display = 'none';
                 
-                // مسح رسالة الحالة بعد 5 ثواني
                 setTimeout(() => {
-                    if (statusMsg.innerText === "تم التحميل بنجاح!") statusMsg.innerText = "";
-                }, 5000);
+                    if (statusMsg.innerText.includes("تم")) statusMsg.innerText = "";
+                }, 4000);
             }
         }
     </script>
