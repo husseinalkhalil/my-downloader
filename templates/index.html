@@ -5,24 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>تحميل الوسائط</title>
 
-    <!-- إعدادات الأيقونة (تأكد أن الصورة موجودة في static/icon/log.png) -->
     <link rel="icon" type="image/png" href="/static/icon/log.png">
     <link rel="apple-touch-icon" href="/static/icon/log.png">
-    
-    <!-- تلوين شريط المتصفح في الجوال باللون البنفسجي -->
     <meta name="theme-color" content="#8e44ad">
 
     <style>
-        /* إعدادات الهوية البصرية (بنفسجي + بيج) */
+        /* نفس التصميم السابق (بنفسجي وبيج) */
         :root {
-            --bg-color: #fdfbf7;        /* بيج فاتح (كريمي) */
-            --card-bg: #ffffff;         /* أبيض */
-            --primary-color: #8e44ad;   /* بنفسجي أساسي */
-            --primary-hover: #732d91;   /* بنفسجي غامق */
-            --text-main: #2c2c54;       /* كحلي غامق */
-            --text-sec: #84817a;        /* رمادي دافئ */
+            --bg-color: #fdfbf7;
+            --card-bg: #ffffff;
+            --primary-color: #8e44ad;
+            --primary-hover: #732d91;
+            --text-main: #2c2c54;
+            --text-sec: #84817a;
             --border-color: #eaeaea;    
-            --shadow: 0 10px 30px rgba(142, 68, 173, 0.15); /* ظل بنفسجي خفيف */
+            --shadow: 0 10px 30px rgba(142, 68, 173, 0.15);
         }
 
         body {
@@ -49,7 +46,6 @@
             border: 1px solid #f2f2f2;
         }
 
-        /* تنسيق الشعار (الأيقونة) */
         .logo-img {
             width: 85px;
             height: 85px;
@@ -160,14 +156,13 @@
 <body>
 
     <div class="container">
-        <!-- عرض الأيقونة -->
         <img src="/static/icon/log.png" alt="Logo" class="logo-img">
 
         <h1>تحميل الوسائط</h1>
-        <p class="subtitle">قم بتنزيل الفيديوهات والصور بجودة عالية</p>
+        <p class="subtitle">قم بتنزيل الفيديوهات والصور لألبوم الكاميرا</p>
 
         <div class="input-group">
-            <input type="text" id="urlInput" placeholder="الصق الرابط هنا (تويتر، انستا، يوتيوب...)" autocomplete="off">
+            <input type="text" id="urlInput" placeholder="الصق الرابط هنا..." autocomplete="off">
         </div>
 
         <button id="downloadBtn" onclick="startDownload()">
@@ -178,7 +173,7 @@
         <div id="status-msg"></div>
         
         <div class="footer">
-            يدعم الفيديو والصور من معظم المنصات
+            ملاحظة للآيفون: اختر "حفظ الفيديو" من القائمة التي ستظهر
         </div>
     </div>
 
@@ -198,16 +193,14 @@
                 return;
             }
 
-            // 1. تفريغ المربع فوراً
             input.value = '';
-            input.blur(); // إخفاء لوحة المفاتيح
+            input.blur();
 
-            // 2. تغيير واجهة الزر
             btn.disabled = true;
             btnText.style.display = 'none';
             spinner.style.display = 'block';
             statusMsg.style.color = "#84817a";
-            statusMsg.innerText = "جاري المعالجة والتحميل... يرجى الانتظار";
+            statusMsg.innerText = "جاري المعالجة... يرجى الانتظار";
 
             try {
                 const formData = new FormData();
@@ -220,43 +213,69 @@
 
                 if (response.ok) {
                     const blob = await response.blob();
-                    const downloadUrl = window.URL.createObjectURL(blob);
                     
-                    const a = document.createElement('a');
-                    a.href = downloadUrl;
+                    // تحديد اسم ونوع الملف
+                    const contentType = response.headers.get("content-type") || "video/mp4";
+                    const ext = contentType.includes("image") ? ".jpg" : ".mp4";
+                    const fileName = "downloaded_media" + ext;
                     
-                    // التعديل الهام هنا:
-                    // قمنا بتسمية الملف اسماً عاماً بدون لاحقة (.mp4)
-                    // هذا يسمح للمتصفح باكتشاف نوع الملف (صورة أو فيديو) تلقائياً وحفظه بالصيغة الصحيحة
-                    a.download = "downloaded_media"; 
-                    
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    
-                    statusMsg.style.color = "#27ae60"; // أخضر
-                    statusMsg.innerText = "✅ تم التنزيل بنجاح!";
+                    const file = new File([blob], fileName, { type: contentType });
+
+                    // --- الكود الجديد: التحقق من إمكانية المشاركة (للجوال) ---
+                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                        statusMsg.innerText = "📲 جاري فتح قائمة الحفظ...";
+                        try {
+                            await navigator.share({
+                                files: [file],
+                                title: 'تحميل وسائط',
+                                text: 'تم تحميل الملف بنجاح'
+                            });
+                            statusMsg.style.color = "#27ae60";
+                            statusMsg.innerText = "✅ تم الحفظ!";
+                        } catch (err) {
+                            // إذا ألغى المستخدم المشاركة أو حدث خطأ، نعود للتحميل التقليدي
+                            if (err.name !== 'AbortError') {
+                                fallbackDownload(blob, fileName);
+                            } else {
+                                statusMsg.innerText = "";
+                            }
+                        }
+                    } else {
+                        // --- للكمبيوتر أو المتصفحات القديمة ---
+                        fallbackDownload(blob, fileName);
+                        statusMsg.style.color = "#27ae60";
+                        statusMsg.innerText = "✅ تم التحميل لمجلد التنزيلات!";
+                    }
+
                 } else {
                     const errorText = await response.text();
                     throw new Error(errorText);
                 }
 
             } catch (error) {
-                statusMsg.style.color = "#e74c3c"; // أحمر
-                // عرض رسالة خطأ مختصرة وواضحة
-                statusMsg.innerText = "❌ فشل التحميل. تأكد أن الرابط عام وصحيح.";
+                statusMsg.style.color = "#e74c3c";
+                statusMsg.innerText = "❌ فشل التحميل. تأكد من الرابط.";
                 console.error(error);
             } finally {
-                // إعادة الزر لوضعه الطبيعي
                 btn.disabled = false;
                 btnText.style.display = 'block';
                 spinner.style.display = 'none';
                 
-                // إخفاء رسالة النجاح فقط بعد 5 ثواني
                 setTimeout(() => {
                     if (statusMsg.innerText.includes("تم")) statusMsg.innerText = "";
                 }, 5000);
             }
+        }
+
+        // دالة التحميل التقليدية (احتياطية)
+        function fallbackDownload(blob, fileName) {
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
         }
     </script>
 
