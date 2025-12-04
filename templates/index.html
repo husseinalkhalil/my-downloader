@@ -2,77 +2,221 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>محمل الفيديوهات السريع</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>X Downloader</title>
     <style>
+        /* إعدادات الهوية البصرية (ستايل تويتر/X) */
+        :root {
+            --bg-color: #000000;
+            --card-bg: #16181c;
+            --text-main: #e7e9ea;
+            --text-sec: #71767b;
+            --twitter-blue: #1d9bf0;
+            --twitter-blue-hover: #1a8cd8;
+            --border-color: #2f3336;
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #2c3e50;
-            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
             display: flex;
-            justify-content: center;
+            flex-direction: column;
             align-items: center;
-            height: 100vh;
+            justify-content: center;
+            min-height: 100vh;
             margin: 0;
+            padding: 20px;
         }
-        .box {
-            background-color: #34495e;
-            padding: 40px;
-            border-radius: 15px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+
+        .container {
+            width: 100%;
+            max-width: 500px;
             text-align: center;
-            width: 90%;
-            max-width: 450px;
         }
-        h2 { margin-bottom: 20px; color: #2ecc71; }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 30px;
+            font-weight: 800;
+        }
+
+        .input-group {
+            position: relative;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
         input {
             width: 100%;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 8px;
-            border: none;
-            box-sizing: border-box;
+            padding: 16px 20px;
+            background-color: #202327;
+            border: 1px solid var(--border-color);
+            border-radius: 9999px; /* شكل كبسولة */
+            color: white;
             font-size: 16px;
+            outline: none;
+            box-sizing: border-box;
+            transition: 0.2s;
         }
+
+        input:focus {
+            border-color: var(--twitter-blue);
+            background-color: black;
+        }
+
         button {
             width: 100%;
             padding: 15px;
-            background-color: #2ecc71;
+            background-color: var(--twitter-blue);
             color: white;
             border: none;
-            border-radius: 8px;
-            font-size: 18px;
+            border-radius: 9999px;
+            font-size: 17px;
+            font-weight: bold;
             cursor: pointer;
-            transition: 0.3s;
+            transition: 0.2s;
+            box-shadow: 0 4px 10px rgba(29, 155, 240, 0.3);
         }
-        button:hover { background-color: #27ae60; }
-        .hint { margin-top: 15px; font-size: 12px; color: #bdc3c7; }
+
+        button:hover {
+            background-color: var(--twitter-blue-hover);
+        }
+
+        button:disabled {
+            background-color: #333;
+            color: #777;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* رسائل الحالة */
+        #status-msg {
+            margin-top: 20px;
+            font-size: 14px;
+            color: var(--text-sec);
+            min-height: 20px;
+        }
+
+        /* لودر التحميل */
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* تذييل الصفحة */
+        .footer {
+            margin-top: 40px;
+            font-size: 12px;
+            color: var(--text-sec);
+        }
     </style>
-    
-    <script>
-        function prepareDownload() {
-            // 1. تغيير نص الزر
-            var btn = document.getElementById('submit-btn');
-            btn.innerText = 'جاري التحميل... يرجى الانتظار';
-            
-            // 2. تفريغ المربع بعد ثانية ونصف (لضمان أن الرابط أرسل للسيرفر أولاً)
-            setTimeout(function() {
-                document.getElementById('url-input').value = '';
-            }, 1500);
-        }
-    </script>
 </head>
 <body>
 
-    <div class="box">
-        <h2>تحميل فيديو</h2>
-        <!-- تم إضافة معرف ID للمدخلات لكي يتحكم بها الجافاسكريبت -->
-        <form action="/download" method="POST" onsubmit="prepareDownload()">
-            <input type="text" id="url-input" name="url" placeholder="ضع رابط الفيديو هنا..." required>
-            <button type="submit" id="submit-btn">تحميل الآن</button>
-        </form>
-        <p class="hint">ملاحظة: السيرفر المجاني قد يستغرق دقيقة للمعالجة.</p>
+    <div class="container">
+        <!-- عنوان بسيط -->
+        <h1>Video Downloader</h1>
+
+        <div class="input-group">
+            <input type="text" id="urlInput" placeholder="الصق الرابط هنا..." autocomplete="off">
+        </div>
+
+        <button id="downloadBtn" onclick="startDownload()">
+            <span id="btnText">تحميل</span>
+            <div id="spinner" class="spinner"></div>
+        </button>
+
+        <div id="status-msg"></div>
+
+        <div class="footer">
+            يدعم X, YouTube, TikTok, Instagram
+        </div>
     </div>
+
+    <script>
+        async function startDownload() {
+            const input = document.getElementById('urlInput');
+            const btn = document.getElementById('downloadBtn');
+            const btnText = document.getElementById('btnText');
+            const spinner = document.getElementById('spinner');
+            const statusMsg = document.getElementById('status-msg');
+            
+            const url = input.value.trim();
+
+            if (!url) {
+                statusMsg.style.color = "#f4212e"; // لون أحمر تويتر
+                statusMsg.innerText = "الرجاء وضع رابط أولاً";
+                return;
+            }
+
+            // 1. تفريغ المربع فوراً
+            input.value = '';
+            input.blur(); // إخفاء الكيبورد في الجوال
+
+            // 2. تغيير حالة الزر إلى "جاري التحميل"
+            btn.disabled = true;
+            btnText.style.display = 'none';
+            spinner.style.display = 'block';
+            statusMsg.style.color = var(--text-sec);
+            statusMsg.innerText = "جاري المعالجة... قد يستغرق دقيقة";
+
+            try {
+                // إرسال البيانات باستخدام FormData (كما يتوقع كود البايثون)
+                const formData = new FormData();
+                formData.append('url', url);
+
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    // تحويل الرد إلى ملف (Blob)
+                    const blob = await response.blob();
+                    
+                    // استخراج اسم الملف (اختياري) أو تعيين اسم افتراضي
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = "video.mp4"; // الاسم الافتراضي
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    
+                    statusMsg.style.color = "#00ba7c"; // لون أخضر
+                    statusMsg.innerText = "تم التحميل بنجاح!";
+                } else {
+                    // محاولة قراءة رسالة الخطأ
+                    const errorText = await response.text();
+                    throw new Error(errorText || "فشل التحميل");
+                }
+
+            } catch (error) {
+                statusMsg.style.color = "#f4212e";
+                statusMsg.innerText = "حدث خطأ: تأكد من صحة الرابط أو أن الحساب عام.";
+                console.error(error);
+            } finally {
+                // إعادة الزر لوضعه الطبيعي
+                btn.disabled = false;
+                btnText.style.display = 'block';
+                spinner.style.display = 'none';
+                
+                // مسح رسالة الحالة بعد 5 ثواني
+                setTimeout(() => {
+                    if (statusMsg.innerText === "تم التحميل بنجاح!") statusMsg.innerText = "";
+                }, 5000);
+            }
+        }
+    </script>
 
 </body>
 </html>
