@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Video Downloader</title>
+    <title>تحميل الوسائط</title>
 
-    <!-- إعدادات الأيقونة (المسار الجديد داخل مجلد static) -->
+    <!-- إعدادات الأيقونة (تأكد أن الصورة موجودة في static/icon/log.png) -->
     <link rel="icon" type="image/png" href="/static/icon/log.png">
     <link rel="apple-touch-icon" href="/static/icon/log.png">
     
@@ -15,14 +15,14 @@
     <style>
         /* إعدادات الهوية البصرية (بنفسجي + بيج) */
         :root {
-            --bg-color: #fdfbf7;        /* بيج فاتح جداً */
+            --bg-color: #fdfbf7;        /* بيج فاتح (كريمي) */
             --card-bg: #ffffff;         /* أبيض */
-            --primary-color: #8e44ad;   /* بنفسجي */
+            --primary-color: #8e44ad;   /* بنفسجي أساسي */
             --primary-hover: #732d91;   /* بنفسجي غامق */
             --text-main: #2c2c54;       /* كحلي غامق */
-            --text-sec: #84817a;        /* رمادي */
+            --text-sec: #84817a;        /* رمادي دافئ */
             --border-color: #eaeaea;    
-            --shadow: 0 10px 30px rgba(142, 68, 173, 0.15);
+            --shadow: 0 10px 30px rgba(142, 68, 173, 0.15); /* ظل بنفسجي خفيف */
         }
 
         body {
@@ -49,13 +49,14 @@
             border: 1px solid #f2f2f2;
         }
 
-        /* تنسيق الصورة (الأيقونة) لتبدو كشعار في وسط الصفحة */
+        /* تنسيق الشعار (الأيقونة) */
         .logo-img {
-            width: 80px;
-            height: 80px;
+            width: 85px;
+            height: 85px;
             margin-bottom: 15px;
-            border-radius: 15px;
+            border-radius: 18px;
             object-fit: cover;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
 
         h1 {
@@ -132,7 +133,8 @@
             font-size: 14px;
             font-weight: 500;
             min-height: 20px;
-            word-wrap: break-word; /* لضمان عدم خروج نص الخطأ الطويل عن الشاشة */
+            word-wrap: break-word;
+            line-height: 1.5;
         }
 
         .spinner {
@@ -158,25 +160,25 @@
 <body>
 
     <div class="container">
-        <!-- عرض الأيقونة كشعار (اختياري، يضفي جمالية) -->
+        <!-- عرض الأيقونة -->
         <img src="/static/icon/log.png" alt="Logo" class="logo-img">
 
-        <h1>فيديو داونلودر</h1>
-        <p class="subtitle">الصق الرابط وحمل الفيديو بجودة عالية</p>
+        <h1>تحميل الوسائط</h1>
+        <p class="subtitle">قم بتنزيل الفيديوهات والصور بجودة عالية</p>
 
         <div class="input-group">
-            <input type="text" id="urlInput" placeholder="رابط الفيديو (يوتيوب، إكس، تيك توك...)" autocomplete="off">
+            <input type="text" id="urlInput" placeholder="الصق الرابط هنا (تويتر، انستا، يوتيوب...)" autocomplete="off">
         </div>
 
         <button id="downloadBtn" onclick="startDownload()">
-            <span id="btnText">تحميل الفيديو</span>
+            <span id="btnText">بدء التحميل</span>
             <div id="spinner" class="spinner"></div>
         </button>
 
         <div id="status-msg"></div>
         
         <div class="footer">
-            يدعم معظم منصات التواصل الاجتماعي
+            يدعم الفيديو والصور من معظم المنصات
         </div>
     </div>
 
@@ -196,16 +198,16 @@
                 return;
             }
 
-            // تفريغ المربع فوراً
+            // 1. تفريغ المربع فوراً
             input.value = '';
-            input.blur(); 
+            input.blur(); // إخفاء لوحة المفاتيح
 
-            // تغيير حالة الزر
+            // 2. تغيير واجهة الزر
             btn.disabled = true;
             btnText.style.display = 'none';
             spinner.style.display = 'block';
             statusMsg.style.color = "#84817a";
-            statusMsg.innerText = "جاري التحميل والمعالجة... لحظات";
+            statusMsg.innerText = "جاري المعالجة والتحميل... يرجى الانتظار";
 
             try {
                 const formData = new FormData();
@@ -220,34 +222,37 @@
                     const blob = await response.blob();
                     const downloadUrl = window.URL.createObjectURL(blob);
                     
-                    // استخراج اسم الملف المقترح من الهيدر (اختياري)
                     const a = document.createElement('a');
                     a.href = downloadUrl;
-                    a.download = "video.mp4";
+                    
+                    // التعديل الهام هنا:
+                    // قمنا بتسمية الملف اسماً عاماً بدون لاحقة (.mp4)
+                    // هذا يسمح للمتصفح باكتشاف نوع الملف (صورة أو فيديو) تلقائياً وحفظه بالصيغة الصحيحة
+                    a.download = "downloaded_media"; 
+                    
                     document.body.appendChild(a);
                     a.click();
                     a.remove();
                     
-                    statusMsg.style.color = "#27ae60";
+                    statusMsg.style.color = "#27ae60"; // أخضر
                     statusMsg.innerText = "✅ تم التنزيل بنجاح!";
                 } else {
-                    // قراءة رسالة الخطأ النصية من السيرفر
                     const errorText = await response.text();
                     throw new Error(errorText);
                 }
 
             } catch (error) {
-                statusMsg.style.color = "#e74c3c";
-                // عرض جزء من الخطأ فقط لتجنب الرسائل الطويلة جداً
-                statusMsg.innerText = "❌ " + error.message;
+                statusMsg.style.color = "#e74c3c"; // أحمر
+                // عرض رسالة خطأ مختصرة وواضحة
+                statusMsg.innerText = "❌ فشل التحميل. تأكد أن الرابط عام وصحيح.";
                 console.error(error);
             } finally {
-                // إعادة الزر
+                // إعادة الزر لوضعه الطبيعي
                 btn.disabled = false;
                 btnText.style.display = 'block';
                 spinner.style.display = 'none';
                 
-                // مسح رسالة النجاح فقط بعد فترة
+                // إخفاء رسالة النجاح فقط بعد 5 ثواني
                 setTimeout(() => {
                     if (statusMsg.innerText.includes("تم")) statusMsg.innerText = "";
                 }, 5000);
