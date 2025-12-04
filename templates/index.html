@@ -31,7 +31,8 @@
             margin-bottom: 20px;
             border-radius: 8px;
             border: none;
-            box-sizing: border-box; /* مهم جداً لضبط الحجم */
+            box-sizing: border-box;
+            font-size: 16px;
         }
         button {
             width: 100%;
@@ -47,17 +48,30 @@
         button:hover { background-color: #27ae60; }
         .hint { margin-top: 15px; font-size: 12px; color: #bdc3c7; }
     </style>
+    
+    <script>
+        function prepareDownload() {
+            // 1. تغيير نص الزر
+            var btn = document.getElementById('submit-btn');
+            btn.innerText = 'جاري التحميل... يرجى الانتظار';
+            
+            // 2. تفريغ المربع بعد ثانية ونصف (لضمان أن الرابط أرسل للسيرفر أولاً)
+            setTimeout(function() {
+                document.getElementById('url-input').value = '';
+            }, 1500);
+        }
+    </script>
 </head>
 <body>
 
     <div class="box">
         <h2>تحميل فيديو</h2>
-        <!-- هذا هو السطر المهم الذي تم تغييره ليعمل مع السيرفر -->
-        <form action="/download" method="POST">
-            <input type="text" name="url" placeholder="ضع رابط الفيديو هنا (يوتيوب، تيك توك...)" required>
-            <button type="submit" onclick="this.innerText='جاري التحميل... (قد يستغرق دقيقة)';">تحميل الآن</button>
+        <!-- تم إضافة معرف ID للمدخلات لكي يتحكم بها الجافاسكريبت -->
+        <form action="/download" method="POST" onsubmit="prepareDownload()">
+            <input type="text" id="url-input" name="url" placeholder="ضع رابط الفيديو هنا..." required>
+            <button type="submit" id="submit-btn">تحميل الآن</button>
         </form>
-        <p class="hint">ملاحظة: السيرفر المجاني قد يستغرق وقتاً أطول قليلاً في المعالجة.</p>
+        <p class="hint">ملاحظة: السيرفر المجاني قد يستغرق دقيقة للمعالجة.</p>
     </div>
 
 </body>
