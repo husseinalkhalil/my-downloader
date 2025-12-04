@@ -3,18 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>تحميل فيديو</title>
+    <title>Video Downloader</title>
+
+    <!-- إعدادات الأيقونة (المسار الجديد داخل مجلد static) -->
+    <link rel="icon" type="image/png" href="/static/icon/log.png">
+    <link rel="apple-touch-icon" href="/static/icon/log.png">
+    
+    <!-- تلوين شريط المتصفح في الجوال باللون البنفسجي -->
+    <meta name="theme-color" content="#8e44ad">
+
     <style>
         /* إعدادات الهوية البصرية (بنفسجي + بيج) */
         :root {
-            --bg-color: #fdfbf7;        /* بيج فاتح جداً (كريمي) */
-            --card-bg: #ffffff;         /* أبيض نقي للمحتوى */
-            --primary-color: #8e44ad;   /* بنفسجي مميز */
-            --primary-hover: #732d91;   /* بنفسجي أغمق عند الضغط */
-            --text-main: #2c2c54;       /* كحلي غامق جداً للنصوص */
-            --text-sec: #84817a;        /* رمادي دافئ للنصوص الفرعية */
-            --border-color: #eaeaea;    /* حدود ناعمة */
-            --shadow: 0 10px 30px rgba(142, 68, 173, 0.15); /* ظل خفيف بنفسجي */
+            --bg-color: #fdfbf7;        /* بيج فاتح جداً */
+            --card-bg: #ffffff;         /* أبيض */
+            --primary-color: #8e44ad;   /* بنفسجي */
+            --primary-hover: #732d91;   /* بنفسجي غامق */
+            --text-main: #2c2c54;       /* كحلي غامق */
+            --text-sec: #84817a;        /* رمادي */
+            --border-color: #eaeaea;    
+            --shadow: 0 10px 30px rgba(142, 68, 173, 0.15);
         }
 
         body {
@@ -35,10 +43,19 @@
             max-width: 480px;
             background-color: var(--card-bg);
             padding: 40px 30px;
-            border-radius: 25px; /* حواف دائرية ناعمة */
+            border-radius: 25px;
             box-shadow: var(--shadow);
             text-align: center;
             border: 1px solid #f2f2f2;
+        }
+
+        /* تنسيق الصورة (الأيقونة) لتبدو كشعار في وسط الصفحة */
+        .logo-img {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 15px;
+            border-radius: 15px;
+            object-fit: cover;
         }
 
         h1 {
@@ -46,6 +63,7 @@
             margin-bottom: 10px;
             font-weight: 800;
             color: var(--primary-color);
+            margin-top: 0;
         }
         
         p.subtitle {
@@ -64,7 +82,7 @@
         input {
             width: 100%;
             padding: 18px 25px;
-            background-color: #f8f6f2; /* بيج أغمق قليلاً للحقل */
+            background-color: #f8f6f2;
             border: 2px solid transparent;
             border-radius: 15px;
             color: var(--text-main);
@@ -102,10 +120,6 @@
             transform: translateY(-2px);
         }
 
-        button:active {
-            transform: translateY(0);
-        }
-
         button:disabled {
             background-color: #ccc;
             box-shadow: none;
@@ -113,15 +127,14 @@
             transform: none;
         }
 
-        /* رسائل الحالة */
         #status-msg {
             margin-top: 25px;
             font-size: 14px;
             font-weight: 500;
             min-height: 20px;
+            word-wrap: break-word; /* لضمان عدم خروج نص الخطأ الطويل عن الشاشة */
         }
 
-        /* لودر التحميل */
         .spinner {
             display: none;
             width: 24px;
@@ -134,7 +147,6 @@
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* تذييل الصفحة */
         .footer {
             margin-top: 30px;
             font-size: 12px;
@@ -146,7 +158,9 @@
 <body>
 
     <div class="container">
-        <!-- العنوان -->
+        <!-- عرض الأيقونة كشعار (اختياري، يضفي جمالية) -->
+        <img src="/static/icon/log.png" alt="Logo" class="logo-img">
+
         <h1>فيديو داونلودر</h1>
         <p class="subtitle">الصق الرابط وحمل الفيديو بجودة عالية</p>
 
@@ -177,16 +191,16 @@
             const url = input.value.trim();
 
             if (!url) {
-                statusMsg.style.color = "#e74c3c"; // أحمر ناعم للخطأ
+                statusMsg.style.color = "#e74c3c";
                 statusMsg.innerText = "⚠️ فضلاً، ضع الرابط في المربع أولاً";
                 return;
             }
 
-            // 1. تفريغ المربع فوراً
+            // تفريغ المربع فوراً
             input.value = '';
             input.blur(); 
 
-            // 2. تغيير واجهة الزر
+            // تغيير حالة الزر
             btn.disabled = true;
             btnText.style.display = 'none';
             spinner.style.display = 'block';
@@ -205,6 +219,8 @@
                 if (response.ok) {
                     const blob = await response.blob();
                     const downloadUrl = window.URL.createObjectURL(blob);
+                    
+                    // استخراج اسم الملف المقترح من الهيدر (اختياري)
                     const a = document.createElement('a');
                     a.href = downloadUrl;
                     a.download = "video.mp4";
@@ -212,16 +228,18 @@
                     a.click();
                     a.remove();
                     
-                    statusMsg.style.color = "#27ae60"; // أخضر
+                    statusMsg.style.color = "#27ae60";
                     statusMsg.innerText = "✅ تم التنزيل بنجاح!";
                 } else {
+                    // قراءة رسالة الخطأ النصية من السيرفر
                     const errorText = await response.text();
                     throw new Error(errorText);
                 }
 
             } catch (error) {
                 statusMsg.style.color = "#e74c3c";
-                statusMsg.innerText = "❌ تعذر التحميل. تأكد من صحة الرابط.";
+                // عرض جزء من الخطأ فقط لتجنب الرسائل الطويلة جداً
+                statusMsg.innerText = "❌ " + error.message;
                 console.error(error);
             } finally {
                 // إعادة الزر
@@ -229,9 +247,10 @@
                 btnText.style.display = 'block';
                 spinner.style.display = 'none';
                 
+                // مسح رسالة النجاح فقط بعد فترة
                 setTimeout(() => {
                     if (statusMsg.innerText.includes("تم")) statusMsg.innerText = "";
-                }, 4000);
+                }, 5000);
             }
         }
     </script>
