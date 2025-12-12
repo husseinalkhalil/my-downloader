@@ -10,19 +10,23 @@ import zipfile
 
 app = Flask(__name__)
 
-# تنظيف المجلدات القديمة عند بدء التشغيل
-def clean_stale_data():
+def clean_server():
+    """تنظيف الملفات المؤقتة والقديمة"""
     try:
-        # حذف ملفات ZIP القديمة
-        for f in glob.glob("media_*.zip"):
-            os.remove(f)
-        # حذف المجلدات المؤقتة القديمة
+        # حذف المجلدات التي تبدأ بـ download_
         for d in glob.glob("download_*"):
             shutil.rmtree(d, ignore_errors=True)
+        # حذف ملفات ZIP القديمة
+        for z in glob.glob("*.zip"):
+            os.remove(z)
+        # حذف ملفات الوسائط المفردة
+        for f in glob.glob("media_*"):
+            os.remove(f)
     except:
         pass
 
-clean_stale_data()
+# تنظيف عند بدء التشغيل
+clean_server()
 
 @app.route('/')
 def home():
@@ -34,84 +38,101 @@ def download_media():
     if not url:
         return "الرجاء إدخال رابط", 400
 
-    # إنشاء مجلد خاص لهذه العملية فقط (لتجنب تداخل الملفات)
+    # 1. تجهيز مجلد عمل خاص لهذا الطلب
     request_id = str(int(time.time()))
-    download_folder = f"download_{request_id}"
-    os.makedirs(download_folder, exist_ok=True)
+    work_dir = f"download_{request_id}"
     
-    # اسم الملف الأساسي داخل المجلد
-    base_filename = os.path.join(download_folder, "media")
+    # التأكد من إنشاء المجلد
+    if not os.path.exists(work_dir):
+        os.makedirs(work_dir)
 
-    # --- إعدادات التحميل ---
+    # 2. إعدادات yt-dlp المخصصة للروابط المتعددة
     ydl_opts = {
-        'format': 'best',
-        'outtmpl': f'{base_filename}_%(autonumber)s.%(ext)s', # ترقيم الملفات تلقائياً
+        'format': 'best', # أفضل جودة متاحة
+        
+        # --- السطر الأهم: تسمية الملفات بترقيم تسلسلي ---
+        # %(playlist_index)s يضع رقم الملف (1, 2, 3...)
+        'outtmpl': f'{work_dir}/media_%(playlist_index)s.%(ext)s',
+        
         'quiet': True,
         'no_warnings': True,
         'ignoreerrors': True,
-        'noplaylist': False,     # تفعيل تحميل القوائم (مهم جداً للبوستات المتعددة)
-        'yes_playlist': True,    # التأكيد على قبول القوائم
-        'writethumbnail': False, # لا نريد صور مصغرة
         
-        # إعدادات خاصة لإنستغرام
+        # تفعيل القوائم (ضروري للبوستات المتعددة)
+        'noplaylist': False,
+        'extract_flat': False,
+        
+        # عدم كتابة ملفات json أو وصف، نريد الميديا فقط
+        'writethumbnail': False,
+        'writeinfojson': False,
+        'writesubtitles': False,
+
+        # إعدادات إنستغرام (خداع الهوية)
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 123.0.0.21.115',
         }
     }
 
-    # إذا لم يكن الرابط من إنستغرام، نستخدم هوية متصفح عادية
+    # تعديل الهوية لباقي المواقع (غير إنستغرام)
     if "instagram.com" not in url:
         ydl_opts['http_headers'] = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
         }
 
     try:
-        # 1. محاولة التحميل باستخدام yt-dlp
+        # --- بدء التحميل ---
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
 
-        # 2. فحص الملفات التي تم تحميلها
-        files = glob.glob(os.path.join(download_folder, "*"))
-        
-        # إذا فشل yt-dlp ولم يجد شيئاً، نجرب التحميل المباشر كصورة وحيدة
+        # --- فحص النتائج ---
+        # البحث عن كل الملفات داخل المجلد (مهما كانت صيغتها)
+        files = []
+        for ext in ['*.mp4', '*.jpg', '*.jpeg', '*.png', '*.webp', '*.mkv', '*.mov']:
+            files.extend(glob.glob(os.path.join(work_dir, ext)))
+
+        # إذا لم نجد شيئاً، نحاول التحميل المباشر كصورة وحيدة (خطة بديلة)
         if not files:
-            direct_file = try_direct_download(url, download_folder)
+            direct_file = try_direct_download(url, work_dir)
             if direct_file:
                 files = [direct_file]
-            else:
-                shutil.rmtree(download_folder, ignore_errors=True)
-                return "فشل التحميل: لم يتم العثور على وسائط في الرابط.", 500
 
-        # 3. اتخاذ القرار: ملف واحد أم مجموعة؟
+        # --- القرار النهائي ---
         
-        # أ) إذا كان ملفاً واحداً فقط
-        if len(files) == 1:
-            final_file = files[0]
-            # نقل الملف خارج المجلد المؤقت ليتم إرساله
-            public_name = f"media_{request_id}{os.path.splitext(final_file)[1]}"
-            shutil.move(final_file, public_name)
-            shutil.rmtree(download_folder, ignore_errors=True) # حذف المجلد المؤقت
-            
-            # جدولة حذف الملف بعد الإرسال
+        # حالة 0: فشل تام
+        if not files:
+            shutil.rmtree(work_dir, ignore_errors=True)
+            return "فشل التحميل: لم يتم العثور على ملفات، أو أن الحساب خاص.", 500
+
+        # حالة 1: ملف واحد فقط
+        elif len(files) == 1:
+            file_path = files[0]
+            # نخرج الملف من المجلد المؤقت لنرسله
+            file_ext = os.path.splitext(file_path)[1]
+            public_filename = f"media_{request_id}{file_ext}"
+            shutil.move(file_path, public_filename)
+            shutil.rmtree(work_dir, ignore_errors=True) # حذف المجلد
+
             @after_this_request
-            def remove_file(response):
-                try: os.remove(public_name)
+            def cleanup_single(response):
+                try: os.remove(public_filename)
                 except: pass
                 return response
 
-            return send_file(public_name, as_attachment=True)
+            # نسميه اسماً عاماً ليتعرف عليه المتصفح
+            return send_file(public_filename, as_attachment=True, download_name=f"downloaded_media{file_ext}")
 
-        # ب) إذا كان أكثر من ملف (ZIP)
+        # حالة 2: مجموعة ملفات (أكثر من 1) -> ZIP
         else:
-            zip_filename = f"media_collection_{request_id}.zip"
+            zip_filename = f"collection_{request_id}.zip"
             with zipfile.ZipFile(zip_filename, 'w') as zipf:
                 for file in files:
+                    # نضيف الملف للضغظ باسم بسيط (media_1.jpg, media_2.mp4)
                     zipf.write(file, os.path.basename(file))
             
-            shutil.rmtree(download_folder, ignore_errors=True) # حذف المجلد المؤقت
+            shutil.rmtree(work_dir, ignore_errors=True) # حذف المجلد الأصلي
 
             @after_this_request
-            def remove_zip(response):
+            def cleanup_zip(response):
                 try: os.remove(zip_filename)
                 except: pass
                 return response
@@ -119,19 +140,22 @@ def download_media():
             return send_file(zip_filename, as_attachment=True, download_name="media_collection.zip")
 
     except Exception as e:
-        shutil.rmtree(download_folder, ignore_errors=True)
-        return f"حدث خطأ: {str(e)}", 500
+        # تنظيف في حال الخطأ
+        shutil.rmtree(work_dir, ignore_errors=True)
+        return f"حدث خطأ أثناء المعالجة: {str(e)}", 500
+
 
 def try_direct_download(url, folder):
-    """محاولة تحميل الرابط كصورة مباشرة إذا فشل yt-dlp"""
+    """محاولة أخيرة: تحميل الرابط كملف مباشر"""
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         response = requests.get(url, headers=headers, stream=True, verify=False, timeout=10)
         content_type = response.headers.get('Content-Type', '').lower()
         
-        if 'image' in content_type and 'html' not in content_type:
+        # التأكد أنه ليس صفحة ويب
+        if 'html' not in content_type:
             ext = mimetypes.guess_extension(content_type.split(';')[0]) or '.jpg'
-            filename = os.path.join(folder, f"image{ext}")
+            filename = os.path.join(folder, f"direct_media{ext}")
             with open(filename, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
