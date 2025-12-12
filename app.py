@@ -4,6 +4,7 @@ import os
 import time
 import shutil
 import requests
+import re # مكتبة البحث في النصوص (Regex)
 from bs4 import BeautifulSoup
 import mimetypes
 
@@ -42,51 +43,42 @@ def process_download():
     current_job_dir = os.path.join(BASE_DOWNLOAD_DIR, request_id)
     os.makedirs(current_job_dir, exist_ok=True)
 
-    # --- المحاولة الأولى: استخدام yt-dlp (الأفضل للجودة) ---
     success = False
-    error_log = ""
-
+    
+    # --- 1. المحاولة الأولى: yt-dlp (الأفضل للجودة) ---
     try:
         ydl_opts = {
-            'format': 'best', # صيغة واحدة لتجنب مشاكل الدمج
+            'format': 'best',
             'outtmpl': f'{current_job_dir}/media_%(playlist_index)s.%(ext)s',
             'quiet': True,
             'ignoreerrors': True,
             'no_warnings': True,
-            'noplaylist': False,
-            # هوية متصفح قوية
+            'noplaylist': False, # تفعيل القوائم
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
             }
         }
         
-        # محاولة خاصة لإنستغرام وتيك توك
-        if "instagram" in url or "tiktok" in url:
+        if "instagram" in url:
              ydl_opts['http_headers']['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
 
-        # التحقق هل نزل شيء؟
         if len(os.listdir(current_job_dir)) > 0:
             success = True
-        else:
-            error_log = "yt-dlp لم يجد ملفات."
 
-    except Exception as e:
-        error_log = str(e)
-        success = False
+    except Exception:
+        pass # ننتقل للخطة البديلة بصمت
 
-    # --- المحاولة الثانية: نظام الطوارئ (Scraping Fallback) ---
-    # يعمل فقط إذا فشلت المحاولة الأولى، وكان الرابط لملف واحد (فيديو/صورة)
+    # --- 2. المحاولة الثانية: الصياد الذكي (Regex Hunter) ---
+    # يعمل إذا فشل yt-dlp في إيجاد أي ملف
     if not success:
-        print(f"yt-dlp failed ({error_log}), trying fallback scraper...")
-        if fallback_scraper(url, current_job_dir):
+        print("yt-dlp returned nothing, starting Regex Hunter...")
+        if regex_gallery_scraper(url, current_job_dir):
             success = True
 
-    # --- النتيجة النهائية ---
+    # --- النتيجة ---
     if success:
         files_list = sorted(os.listdir(current_job_dir))
         return jsonify({
@@ -97,14 +89,15 @@ def process_download():
         })
     else:
         shutil.rmtree(current_job_dir, ignore_errors=True)
-        return jsonify({"error": "فشل التحميل من السيرفر. الموقع قد يحظر عناوين الاستضافة (IP Block)."}), 500
+        return jsonify({"error": "فشل التحميل: لم يتم العثور على وسائط (قد يكون الحساب خاصاً أو محظوراً)."}), 500
 
-# --- دالة الطوارئ (تقوم بمسح الصفحة يدوياً للبحث عن الفيديو) ---
-def fallback_scraper(url, save_dir):
+
+# --- وظيفة الصياد الذكي (لاستخراج صور متعددة) ---
+def regex_gallery_scraper(url, save_dir):
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': 'https://www.google.com/'
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         }
         
         session = requests.Session()
@@ -113,57 +106,70 @@ def fallback_scraper(url, save_dir):
         if response.status_code != 200:
             return False
 
-        soup = BeautifulSoup(response.text, 'html.parser')
-        media_url = None
-        ext = ".mp4" # افتراضي
+        html_content = response.text
+        found_urls = set() # نستخدم set لمنع التكرار
 
-        # 1. البحث عن فيديو في وسوم meta (شائع في انستا وتيك توك وفيسبوك)
-        og_video = soup.find("meta", property="og:video")
-        if og_video:
-            media_url = og_video["content"]
-        
-        # 2. البحث عن تويتر فيديو
-        if not media_url:
-            twitter_stream = soup.find("meta", property="twitter:player:stream")
-            if twitter_stream:
-                media_url = twitter_stream["content"]
+        # 1. بحث خاص بتويتر (X) - روابط الصور عالية الجودة
+        # تويتر يستخدم صيغة: pbs.twimg.com/media/XXXXX?format=jpg
+        twitter_pattern = r'https://pbs\.twimg\.com/media/[\w\-]+\?format=[\w]+&name=[\w]+|https://pbs\.twimg\.com/media/[\w\-]+\.[\w]+'
+        twitter_matches = re.findall(twitter_pattern, html_content)
+        for link in twitter_matches:
+            # تنظيف الرابط للحصول على أفضل جودة
+            clean_link = link.replace('&name=small', '&name=large').replace('&name=medium', '&name=large')
+            if "name=large" not in clean_link and "?" in clean_link:
+                 clean_link += "&name=large"
+            found_urls.add(clean_link)
 
-        # 3. البحث عن صورة إذا لم نجد فيديو
-        if not media_url:
-            og_image = soup.find("meta", property="og:image")
-            if og_image:
-                media_url = og_image["content"]
-                ext = ".jpg"
-
-        # 4. البحث داخل وسم video مباشرة
-        if not media_url:
-            video_tag = soup.find("video")
-            if video_tag and video_tag.get("src"):
-                media_url = video_tag["src"]
-
-        # إذا وجدنا رابطاً مباشراً، نقوم بتحميله
-        if media_url:
-            # تنظيف الرابط أحيانا يكون html entity
-            media_url = media_url.replace("&amp;", "&")
+        # 2. بحث عام عن روابط الصور (jpg, png, jpeg)
+        # يبحث عن أي رابط يبدأ بـ http وينتهي بصيغة صورة
+        if not found_urls:
+            general_pattern = r'https?://[^\s<>"]+?\.(?:jpg|jpeg|png)(?:\?[^\s<>"]*)?'
+            matches = re.findall(general_pattern, html_content)
             
-            media_data = session.get(media_url, headers=headers, stream=True)
-            if media_data.status_code == 200:
-                # تخمين الامتداد الحقيقي
-                content_type = media_data.headers.get('Content-Type', '')
-                guessed_ext = mimetypes.guess_extension(content_type.split(';')[0])
-                if guessed_ext:
-                    ext = guessed_ext
+            for link in matches:
+                # فلترة: نستبعد الأيقونات الصغيرة وصور الإعلانات
+                if any(x in link for x in ['icon', 'logo', 'avatar', 'profile', 'svg', 'ad', 'pixel']):
+                    continue
+                found_urls.add(link)
 
-                filename = os.path.join(save_dir, f"backup_download{ext}")
-                with open(filename, 'wb') as f:
-                    for chunk in media_data.iter_content(chunk_size=8192):
-                        f.write(chunk)
-                return True
-                
+        # 3. التحميل الفعلي للملفات التي وجدناها
+        count = 0
+        if found_urls:
+            print(f"Found {len(found_urls)} potential images via Regex")
+            
+            for media_url in found_urls:
+                # محاولة تحميل الملف
+                try:
+                    # تنظيف الرابط من الرموز الغريبة (unicode escape)
+                    media_url = media_url.replace(r'\/', '/') 
+                    
+                    media_data = session.get(media_url, headers=headers, stream=True, timeout=5)
+                    
+                    # التحقق من حجم الملف (لتجاهل الصور الصغيرة جداً < 5KB)
+                    if len(media_data.content) < 5000: 
+                        continue
+
+                    # تحديد الامتداد
+                    content_type = media_data.headers.get('Content-Type', '')
+                    ext = mimetypes.guess_extension(content_type.split(';')[0]) or ".jpg"
+                    
+                    count += 1
+                    filename = os.path.join(save_dir, f"image_{count}{ext}")
+                    
+                    with open(filename, 'wb') as f:
+                        f.write(media_data.content)
+                        
+                    # نكتفي بأول 10 صور لتجنب تحميل الموقع كاملاً بالخطأ
+                    if count >= 10: break
+                    
+                except:
+                    continue
+
+        return count > 0
+
     except Exception as e:
-        print(f"Fallback failed: {e}")
-    
-    return False
+        print(f"Regex Scraper failed: {e}")
+        return False
 
 @app.route('/get-file/<folder_id>/<filename>')
 def get_file(folder_id, filename):
