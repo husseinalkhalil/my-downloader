@@ -1,31 +1,33 @@
-from flask import Flask, render_template, request, send_file, after_this_request
+from flask import Flask, render_template, request, send_from_directory, jsonify
 import yt_dlp
 import os
 import time
 import glob
-import requests
-import mimetypes
 import shutil
-import zipfile
 
 app = Flask(__name__)
 
+# المجلد الأساسي للتنزيلات
+BASE_DOWNLOAD_DIR = "downloads"
+
 def clean_server():
-    """تنظيف الملفات المؤقتة والقديمة"""
+    """تنظيف الملفات القديمة التي مر عليها أكثر من 10 دقائق"""
+    if not os.path.exists(BASE_DOWNLOAD_DIR):
+        os.makedirs(BASE_DOWNLOAD_DIR)
+        return
+
+    current_time = time.time()
     try:
-        # حذف المجلدات التي تبدأ بـ download_
-        for d in glob.glob("download_*"):
-            shutil.rmtree(d, ignore_errors=True)
-        # حذف ملفات ZIP القديمة
-        for z in glob.glob("*.zip"):
-            os.remove(z)
-        # حذف ملفات الوسائط المفردة
-        for f in glob.glob("media_*"):
-            os.remove(f)
+        # البحث داخل مجلد التنزيلات
+        for folder in os.listdir(BASE_DOWNLOAD_DIR):
+            folder_path = os.path.join(BASE_DOWNLOAD_DIR, folder)
+            # إذا كان مجلداً ومر عليه وقت طويل نحذفه
+            if os.path.isdir(folder_path):
+                if current_time - os.path.getmtime(folder_path) > 600:
+                    shutil.rmtree(folder_path, ignore_errors=True)
     except:
         pass
 
-# تنظيف عند بدء التشغيل
 clean_server()
 
 @app.route('/')
@@ -33,136 +35,72 @@ def home():
     return render_template('index.html')
 
 @app.route('/download', methods=['POST'])
-def download_media():
+def process_download():
     url = request.form.get('url')
     if not url:
-        return "الرجاء إدخال رابط", 400
+        return jsonify({"error": "الرجاء إدخال رابط"}), 400
 
-    # 1. تجهيز مجلد عمل خاص لهذا الطلب
+    # إنشاء مجلد فرعي لكل طلب (باستخدام التوقيت)
     request_id = str(int(time.time()))
-    work_dir = f"download_{request_id}"
-    
-    # التأكد من إنشاء المجلد
-    if not os.path.exists(work_dir):
-        os.makedirs(work_dir)
+    current_job_dir = os.path.join(BASE_DOWNLOAD_DIR, request_id)
+    os.makedirs(current_job_dir, exist_ok=True)
 
-    # 2. إعدادات yt-dlp المخصصة للروابط المتعددة
+    # إعدادات yt-dlp
     ydl_opts = {
-        'format': 'best', # أفضل جودة متاحة
-        
-        # --- السطر الأهم: تسمية الملفات بترقيم تسلسلي ---
-        # %(playlist_index)s يضع رقم الملف (1, 2, 3...)
-        'outtmpl': f'{work_dir}/media_%(playlist_index)s.%(ext)s',
-        
+        'format': 'best',
+        # ترقيم الملفات: media_1.mp4, media_2.jpg
+        'outtmpl': f'{current_job_dir}/media_%(playlist_index)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
         'ignoreerrors': True,
+        'noplaylist': False, # تفعيل القوائم
         
-        # تفعيل القوائم (ضروري للبوستات المتعددة)
-        'noplaylist': False,
-        'extract_flat': False,
-        
-        # عدم كتابة ملفات json أو وصف، نريد الميديا فقط
-        'writethumbnail': False,
-        'writeinfojson': False,
-        'writesubtitles': False,
-
-        # إعدادات إنستغرام (خداع الهوية)
+        # إعدادات إنستغرام وتويتر
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 123.0.0.21.115',
         }
     }
-
-    # تعديل الهوية لباقي المواقع (غير إنستغرام)
+    
+    # تغيير الهوية لغير إنستغرام
     if "instagram.com" not in url:
-        ydl_opts['http_headers'] = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
-        }
+        ydl_opts['http_headers']['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/115.0.0.0 Safari/537.36'
 
     try:
-        # --- بدء التحميل ---
+        # بدء التحميل للسيرفر
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
 
-        # --- فحص النتائج ---
-        # البحث عن كل الملفات داخل المجلد (مهما كانت صيغتها)
-        files = []
-        for ext in ['*.mp4', '*.jpg', '*.jpeg', '*.png', '*.webp', '*.mkv', '*.mov']:
-            files.extend(glob.glob(os.path.join(work_dir, ext)))
+        # جرد الملفات التي تم تحميلها
+        files_list = []
+        # نبحث عن جميع الملفات في المجلد
+        for filename in os.listdir(current_job_dir):
+            files_list.append(filename)
 
-        # إذا لم نجد شيئاً، نحاول التحميل المباشر كصورة وحيدة (خطة بديلة)
-        if not files:
-            direct_file = try_direct_download(url, work_dir)
-            if direct_file:
-                files = [direct_file]
+        if not files_list:
+            shutil.rmtree(current_job_dir)
+            return jsonify({"error": "فشل التحميل: لم يتم العثور على وسائط."}), 500
 
-        # --- القرار النهائي ---
-        
-        # حالة 0: فشل تام
-        if not files:
-            shutil.rmtree(work_dir, ignore_errors=True)
-            return "فشل التحميل: لم يتم العثور على ملفات، أو أن الحساب خاص.", 500
-
-        # حالة 1: ملف واحد فقط
-        elif len(files) == 1:
-            file_path = files[0]
-            # نخرج الملف من المجلد المؤقت لنرسله
-            file_ext = os.path.splitext(file_path)[1]
-            public_filename = f"media_{request_id}{file_ext}"
-            shutil.move(file_path, public_filename)
-            shutil.rmtree(work_dir, ignore_errors=True) # حذف المجلد
-
-            @after_this_request
-            def cleanup_single(response):
-                try: os.remove(public_filename)
-                except: pass
-                return response
-
-            # نسميه اسماً عاماً ليتعرف عليه المتصفح
-            return send_file(public_filename, as_attachment=True, download_name=f"downloaded_media{file_ext}")
-
-        # حالة 2: مجموعة ملفات (أكثر من 1) -> ZIP
-        else:
-            zip_filename = f"collection_{request_id}.zip"
-            with zipfile.ZipFile(zip_filename, 'w') as zipf:
-                for file in files:
-                    # نضيف الملف للضغظ باسم بسيط (media_1.jpg, media_2.mp4)
-                    zipf.write(file, os.path.basename(file))
-            
-            shutil.rmtree(work_dir, ignore_errors=True) # حذف المجلد الأصلي
-
-            @after_this_request
-            def cleanup_zip(response):
-                try: os.remove(zip_filename)
-                except: pass
-                return response
-
-            return send_file(zip_filename, as_attachment=True, download_name="media_collection.zip")
+        # إرسال قائمة الملفات للمتصفح (JSON)
+        # المتصفح هو من سيقوم بطلب تحميلها واحداً تلو الآخر
+        return jsonify({
+            "status": "success",
+            "folder_id": request_id,
+            "files": sorted(files_list), # ترتيب الملفات 1, 2, 3
+            "count": len(files_list)
+        })
 
     except Exception as e:
-        # تنظيف في حال الخطأ
-        shutil.rmtree(work_dir, ignore_errors=True)
-        return f"حدث خطأ أثناء المعالجة: {str(e)}", 500
+        shutil.rmtree(current_job_dir, ignore_errors=True)
+        return jsonify({"error": str(e)}), 500
 
-
-def try_direct_download(url, folder):
-    """محاولة أخيرة: تحميل الرابط كملف مباشر"""
+# هذا الرابط الجديد هو الذي سيستخدمه المتصفح لتحميل الملفات فعلياً
+@app.route('/get-file/<folder_id>/<filename>')
+def get_file(folder_id, filename):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-        response = requests.get(url, headers=headers, stream=True, verify=False, timeout=10)
-        content_type = response.headers.get('Content-Type', '').lower()
-        
-        # التأكد أنه ليس صفحة ويب
-        if 'html' not in content_type:
-            ext = mimetypes.guess_extension(content_type.split(';')[0]) or '.jpg'
-            filename = os.path.join(folder, f"direct_media{ext}")
-            with open(filename, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            return filename
-    except:
-        pass
-    return None
+        directory = os.path.join(BASE_DOWNLOAD_DIR, folder_id)
+        return send_from_directory(directory, filename, as_attachment=True)
+    except Exception as e:
+        return "File not found", 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
