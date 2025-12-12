@@ -4,13 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>تحميل الوسائط</title>
-
     <link rel="icon" type="image/png" href="/static/icon/log.png">
     <link rel="apple-touch-icon" href="/static/icon/log.png">
     <meta name="theme-color" content="#8e44ad">
 
     <style>
-        /* نفس التصميم السابق (بنفسجي وبيج) */
+        /* (نفس الستايل السابق تماماً) */
         :root {
             --bg-color: #fdfbf7;
             --card-bg: #ffffff;
@@ -21,7 +20,6 @@
             --border-color: #eaeaea;    
             --shadow: 0 10px 30px rgba(142, 68, 173, 0.15);
         }
-
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-color);
@@ -34,7 +32,6 @@
             margin: 0;
             padding: 20px;
         }
-
         .container {
             width: 100%;
             max-width: 480px;
@@ -45,7 +42,6 @@
             text-align: center;
             border: 1px solid #f2f2f2;
         }
-
         .logo-img {
             width: 85px;
             height: 85px;
@@ -54,7 +50,6 @@
             object-fit: cover;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
-
         h1 {
             font-size: 26px;
             margin-bottom: 10px;
@@ -62,20 +57,17 @@
             color: var(--primary-color);
             margin-top: 0;
         }
-        
         p.subtitle {
             margin-top: 0;
             margin-bottom: 30px;
             color: var(--text-sec);
             font-size: 14px;
         }
-
         .input-group {
             position: relative;
             width: 100%;
             margin-bottom: 20px;
         }
-
         input {
             width: 100%;
             padding: 18px 25px;
@@ -88,13 +80,11 @@
             box-sizing: border-box;
             transition: 0.3s;
         }
-
         input:focus {
             background-color: #fff;
             border-color: var(--primary-color);
             box-shadow: 0 4px 15px rgba(142, 68, 173, 0.1);
         }
-
         button {
             width: 100%;
             padding: 18px;
@@ -111,19 +101,16 @@
             justify-content: center;
             align-items: center;
         }
-
         button:hover {
             background-color: var(--primary-hover);
             transform: translateY(-2px);
         }
-
         button:disabled {
             background-color: #ccc;
             box-shadow: none;
             cursor: not-allowed;
             transform: none;
         }
-
         #status-msg {
             margin-top: 25px;
             font-size: 14px;
@@ -132,7 +119,6 @@
             word-wrap: break-word;
             line-height: 1.5;
         }
-
         .spinner {
             display: none;
             width: 24px;
@@ -142,9 +128,7 @@
             border-top-color: #fff;
             animation: spin 0.8s ease-in-out infinite;
         }
-
         @keyframes spin { to { transform: rotate(360deg); } }
-
         .footer {
             margin-top: 30px;
             font-size: 12px;
@@ -159,7 +143,7 @@
         <img src="/static/icon/log.png" alt="Logo" class="logo-img">
 
         <h1>تحميل الوسائط</h1>
-        <p class="subtitle">قم بتنزيل الفيديوهات والصور لألبوم الكاميرا</p>
+        <p class="subtitle">قم بتنزيل الفيديوهات والصور (مفرد أو متعدد)</p>
 
         <div class="input-group">
             <input type="text" id="urlInput" placeholder="الصق الرابط هنا..." autocomplete="off">
@@ -173,7 +157,7 @@
         <div id="status-msg"></div>
         
         <div class="footer">
-            ملاحظة للآيفون: اختر "حفظ الفيديو" من القائمة التي ستظهر
+            يدعم الألبومات المتعددة (سيتم تحميلها كملف مضغوط ZIP)
         </div>
     </div>
 
@@ -200,7 +184,7 @@
             btnText.style.display = 'none';
             spinner.style.display = 'block';
             statusMsg.style.color = "#84817a";
-            statusMsg.innerText = "جاري المعالجة... يرجى الانتظار";
+            statusMsg.innerText = "جاري جلب جميع الملفات... قد يستغرق وقتاً حسب العدد";
 
             try {
                 const formData = new FormData();
@@ -213,38 +197,35 @@
 
                 if (response.ok) {
                     const blob = await response.blob();
+                    const contentType = response.headers.get("content-type") || "";
                     
-                    // تحديد اسم ونوع الملف
-                    const contentType = response.headers.get("content-type") || "video/mp4";
-                    const ext = contentType.includes("image") ? ".jpg" : ".mp4";
-                    const fileName = "downloaded_media" + ext;
-                    
-                    const file = new File([blob], fileName, { type: contentType });
+                    // تحديد هل الملف فردي أم مجموعة (ZIP)
+                    let fileName = "downloaded_media";
+                    let isZip = false;
 
-                    // --- الكود الجديد: التحقق من إمكانية المشاركة (للجوال) ---
-                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                        statusMsg.innerText = "📲 جاري فتح قائمة الحفظ...";
-                        try {
-                            await navigator.share({
-                                files: [file],
-                                title: 'تحميل وسائط',
-                                text: 'تم تحميل الملف بنجاح'
-                            });
-                            statusMsg.style.color = "#27ae60";
-                            statusMsg.innerText = "✅ تم الحفظ!";
-                        } catch (err) {
-                            // إذا ألغى المستخدم المشاركة أو حدث خطأ، نعود للتحميل التقليدي
-                            if (err.name !== 'AbortError') {
-                                fallbackDownload(blob, fileName);
-                            } else {
-                                statusMsg.innerText = "";
-                            }
-                        }
+                    if (contentType.includes("zip")) {
+                        fileName += ".zip";
+                        isZip = true;
+                        statusMsg.innerText = "📦 جاري تنزيل المجموعة (ZIP)...";
+                    } else if (contentType.includes("video")) {
+                        fileName += ".mp4";
+                    } else if (contentType.includes("image")) {
+                        fileName += ".jpg";
+                    }
+
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    
+                    statusMsg.style.color = "#27ae60";
+                    if (isZip) {
+                        statusMsg.innerText = "✅ تم تحميل المجموعة كملف ZIP!";
                     } else {
-                        // --- للكمبيوتر أو المتصفحات القديمة ---
-                        fallbackDownload(blob, fileName);
-                        statusMsg.style.color = "#27ae60";
-                        statusMsg.innerText = "✅ تم التحميل لمجلد التنزيلات!";
+                        statusMsg.innerText = "✅ تم التحميل بنجاح!";
                     }
 
                 } else {
@@ -254,7 +235,7 @@
 
             } catch (error) {
                 statusMsg.style.color = "#e74c3c";
-                statusMsg.innerText = "❌ فشل التحميل. تأكد من الرابط.";
+                statusMsg.innerText = "❌ فشل التحميل. قد يكون الرابط خاصاً.";
                 console.error(error);
             } finally {
                 btn.disabled = false;
@@ -263,19 +244,8 @@
                 
                 setTimeout(() => {
                     if (statusMsg.innerText.includes("تم")) statusMsg.innerText = "";
-                }, 5000);
+                }, 8000);
             }
-        }
-
-        // دالة التحميل التقليدية (احتياطية)
-        function fallbackDownload(blob, fileName) {
-            const downloadUrl = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
         }
     </script>
 
